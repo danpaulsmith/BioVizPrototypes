@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+.link {
+  stroke: #000;
+}
+
+.node {
+  stroke: #fff;
+}
+</style>
+<script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+  <meta charset="utf-8">
+  <title>GeneMANIA Example</title>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script type="text/javacsript">
+// D3 small multiples with force-directed graphs example
+// with borrowed materical from this block: http://bl.ocks.org/mbostock/2949937
+
+var width = 300;
+var height = 300;
+
+var svgOne = d3.select("#one")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgTwo = d3.select("#two")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgThree = d3.select("#three")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgFour = d3.select("#four")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgFive = d3.select("#five")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgSix = d3.select("#six")
+      .attr("width", width)
+      .attr("height", height);
+
+var svgSeven = d3.select("#seven")
+      .attr("width", width)
+      .attr("height", height);
+
+// force code below
+
+var force = d3.layout.force()
+    .size([width, height])
+    .charge(-350);
+
+var relevantGroups = ["Co-expression","Co-localization","Pathway ","Physical&nbsp;interactions","Predicted","Shared&nbsp;protein&nbsp;domains"].sort();
+
+var colorScale = d3.scale.category10()
+              .domain(relevantGroups);
+
+var debug_links;
+var debug_nodes;
+var debug_edgeCommon;
+
+d3.tsv("interaction_list.txt", function(error, links) {
+  if (error !== null) {
+    console.log(error);
+  }
+  else {
+    //console.log(links);
+    debug_links = links;
+    
+    var nodesByName = {};
+
+    // Create nodes for each unique source and target.
+    links.forEach(function(link) {
+      link.source = nodeByName(link.Gene_1);
+      link.target = nodeByName(link.Gene_2);
+      link.Weight = +link.Weight;
+      link.Network_Group  = link.Network_Group;
+    });
+    
+    var links_coexpression    = links.filter(function(l) { return l.Network_Group === "Co-expression";});
+    var links_colocalization  = links.filter(function(l) { return l.Network_Group === "Co-localization";});
+    var links_pathways        = links.filter(function(l) { return l.Network_Group === "Pathway";});
+    var links_physical        = links.filter(function(l) { return l.Network_Group === "Physical&nbsp;interactions";});
+    var links_predicted       = links.filter(function(l) { return l.Network_Group === "Predicted";});
+    var links_shared          = links.filter(function(l) { return l.Network_Group === "Shared&nbsp;protein&nbsp;domains";});
+
+    // Extract the array of nodes from the map by name.
+    var nodes = d3.values(nodesByName);
+    debug_nodes = nodes;
+    
+    // Create Titles
+    var titleOne = svgOne
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("co-expression");
+
+    var titleTwo = svgTwo
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("co-localization");
+    
+    var titleThree = svgThree
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("pathways");
+    
+    var titleFour = svgFour
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("physical");
+    
+    var titleFive = svgFive
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("predicted");
+    
+    var titleSix = svgSix
+                  .append("text")
+                  .attr("class", "title")
+                  .attr("x", 30)
+                  .attr("y", 30)
+                  .text("shared");
+
+    // Start the force layout.
+    force
+      .nodes(nodes)
+      .links(links)
+      .on("tick", tick)
+      //.gravity(0.5)
+      .start();
+    
+    // Create the node circles.   
+    var edgeCommon = new Array(nodes.length);
+    for (var i=0; i < nodes.length; i++) {
+      edgeCommon[i] = new Array(nodes.length);
+    }
+    
+    nodes.forEach(function(gene1) {
+      var gene1sum = 0;
+      nodes.forEach(function(gene2) {
+        var numConnections = links.filter(function(n) { 
+          return n.Gene_1 === gene1.name & n.Gene_2 === gene2.name; 
+        }).map(function(n) { 
+          return n.Network_Group; 
+        });
+        //console.log([gene1.name, gene2.name, numConnections.length]);
+        gene1sum = gene1sum + numConnections.length;
+        
+        var gene1Index = Number(nodes.filter(function(d) { 
+          return d.name === gene1.name;
+        }).map(function(i) { 
+          return i.index;
+        }).toString());
+        
+        var gene2Index = Number(nodes.filter(function(d) { 
+          return d.name === gene2.name;
+        }).map(function(i) { 
+          return i.index;
+        }).toString());
+        
+        edgeCommon[gene1Index][gene2Index] = numConnections.length;
+        
+        
+      });
+      // lookup gene and update node radius
+      //console.log([gene1.name, gene1sum]);
+      gene1.radius = gene1.radius+gene1sum;
+    });
+    
+    // setting up code to emphasize unique connections
+    var maxConnections = d3.max(edgeCommon.map(function(a) { return d3.max(a);}));
+    var linkWeightScale = d3.scale.linear()
+                 .domain([0,maxConnections])
+                 .range([maxConnections,0]);
+    
+    debug_edgeCommon = edgeCommon;
+    var threshold = 1; // 1 is high-scaffolding, 5 is low-scaffolding
+    
+    
+    // Create the link lines.
+    var link = svgOne.selectAll(".link")
+        .data(links_coexpression)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "coexpression")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+
+    // Create the link lines.
+    var linkTwo = svgTwo.selectAll(".link")
+        .data(links_pathways)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "pathway")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+    
+    // Create the link lines.
+    var linkThree = svgThree.selectAll(".link")
+        .data(links_physical)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "physical")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+    
+    // Create the link lines.
+    var linkFour = svgFour.selectAll(".link")
+        .data(links_predicted)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "predicted")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+    
+    // Create the link lines.
+    var linkFive = svgFive.selectAll(".link")
+        .data(links_shared)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "shared")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+    
+    // Create the link lines.
+    var linkSix = svgSix.selectAll(".link")
+        .data(links_colocalization)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("class", "shared")
+        .style("stroke", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return colorScale(d.Network_Group);
+          }
+          else {
+            return "gray";
+          }
+        })
+        .style("stroke-width", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 3;
+          }
+          else {
+            return 1.5;
+          }
+        })
+        .style("opacity", function(d) {
+          if (modifyWeight(d) < threshold) {
+            return 1;
+          }
+          else {
+            return 0.2;
+          }
+        });
+    
+    // Create the link lines.
+    var linkSeven = svgSeven.selectAll(".link")
+        .data(links)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("opacity", 0.1);
+  
+   
+    
+    var viewport = svgOne.selectAll(".node")
+        .data(nodes)
+      .enter();
+
+    // Create the node circles.
+    var nodeSeven = svgSeven.selectAll(".labels")
+        .data(nodes)
+      .enter().append("text")
+        .text(function(d) {
+          return d.name;
+        })
+        .attr("class", function(d) {
+          return d.name+' labels svgSeven';
+        })
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+    
+    var node = viewport.append("circle")
+        .attr("class", function(d) {
+          //console.log(d.name+' node svgOne');
+          return d.name+' node svgOne';
+        })
+        .attr("r", function(d) {
+          return 4.5;
+          //return d.radius/2;
+        })
+        .attr("fill", "black")
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          //d3.selectAll(nodeClassName).style("font-size", 30);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          //d3.selectAll(nodeClassName).style("font-size", 16);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+    
+    // Create the node circles.
+    var nodeTwo = svgTwo.selectAll(".node")
+        .data(nodes)
+      .enter().append("circle")
+        .attr("class", function(d) {
+          return d.name+' node svgTwo';
+        })
+        .attr("r", 4.5)
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+    // Create the node circles.
+    var nodeThree = svgThree.selectAll(".node")
+        .data(nodes)
+      .enter().append("circle")
+        .attr("class", function(d) {
+          return d.name+' node svgThree';
+        })
+        .attr("r", 4.5)
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+    // Create the node circles.
+    var nodeFour = svgFour.selectAll(".node")
+        .data(nodes)
+      .enter().append("circle")
+        .attr("class", function(d) {
+          return d.name+' node svgFour';
+        })
+        .attr("r", 4.5)
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+
+    // Create the node circles.
+    var nodeFive = svgFive.selectAll(".node")
+        .data(nodes)
+      .enter().append("circle")
+        .attr("class", function(d) {
+          return d.name+' node svgFive';
+        })
+        .attr("r", 4.5)
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+    // Create the node circles.
+    var nodeSix = svgSix.selectAll(".node")
+        .data(nodes)
+      .enter().append("circle")
+        .attr("class", function(d) {
+          return d.name+' node svgSix';
+        })
+        .attr("r", 4.5)
+        .on('mouseover', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 0.1);
+          d3.selectAll(nodeClassName).attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 10);
+        })
+        .on('mouseout', function(d) {
+          var nodeClassName = '.'+d3.select(this).attr("class").split(" ")[0];
+          d3.selectAll(".labels").attr("opacity", 1);
+          d3.selectAll(nodeClassName).attr("r", 4.5);
+        })
+        .call(force.drag);
+    
+
+    
+    function tick() {
+        link.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        node.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkTwo.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeTwo.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkThree.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeThree.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkFour.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeFour.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkFive.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeFive.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkSix.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeSix.attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+      
+        linkSeven.attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        nodeSeven.attr("x", function(d) { return d.x; })
+            .attr("y", function(d) { return d.y; });
+    }
+  
+    function nodeByName(name) {
+      return nodesByName[name] || (nodesByName[name] = {name: name, radius: 1});
+    }    
+    
+    function modifyWeight(item) {
+      return linkWeightScale(edgeCommon[item.source.index][item.target.index]);
+      //return 1.5;
+    }
+   
+    
+    
+  }
+  
+});
+
+
+
+
+
+
+
+</script>
+</head>
+<body>
+  <svg id="one"></svg>
+  <svg id="two"></svg>
+  <svg id="three"></svg>
+  <svg id="four"></svg>
+  <svg id="five"></svg>
+  <svg id="six"></svg>
+  <svg id="seven"></svg>
+</body>
+</html>
